@@ -13,6 +13,7 @@ The shared CI and release pipeline of the Ulanzi plugins: reusable workflows, th
 - A job added to `gate.yml` must also go in the `needs` of `passed`, or it stops blocking merges. A test checks this.
 - Jobs that hold `AUTOMATION_TOKEN` must not run npm, so nothing from a dependency runs next to it. A test checks this.
 - A called workflow can only keep or lower the permissions of its caller, so a new permission here also needs a change in each plugin's caller.
+- Environment secrets only reach a called workflow when the caller says `secrets: inherit`. This was seen on a real run: passed by name, the secret was empty with no error, which is why the integrations job fails on an empty one.
 - `github.*` is always the plugin's. `job.workflow_repository` and `job.workflow_sha` are how a job finds this repository, and `.pipeline` must not be there when `check:secrets` runs, because it scans every file git would commit.
 - `pipeline.json` comes from the pull request, so it is read as data and never run. `flow.mjs` passes it to `gh` with no shell.
 - A required check that never reports blocks every merge, so read the names off a real pull request before changing `CHECKS` in `setup-repo.mjs`. The maintainer runs that script: this session's permission controls refuse settings changes.

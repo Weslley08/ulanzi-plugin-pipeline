@@ -142,6 +142,7 @@ jobs:
     if: ${{ inputs.integrations-scripts != '' }}
     runs-on: ${{ inputs.integrations-os }}
     # An environment can give the secret to release/v* branches only, so no other branch's workflow can read it.
+    # GitHub only hands environment secrets to a called workflow when its caller says "secrets: inherit".
     environment: ${{ inputs.integrations-environment }}
     env:
       INTEGRATIONS_SECRET: ${{ secrets[inputs.integrations-secret] }}
@@ -161,7 +162,7 @@ jobs:
           ENVIRONMENT: ${{ inputs.integrations-environment }}
         run: |
           if [ -z "$INTEGRATIONS_SECRET" ]; then
-            echo "::error::Set $SECRET_NAME in the $ENVIRONMENT environment. See the plugin's CONTRIBUTING.md."
+            echo "::error::$SECRET_NAME did not arrive. It must be set in the $ENVIRONMENT environment, and the plugin's delivery.yml must say \"secrets: inherit\". See its CONTRIBUTING.md."
             exit 1
           fi
           echo "$SECRET_NAME=$INTEGRATIONS_SECRET" >> "$GITHUB_ENV"

@@ -41,10 +41,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # actionlint 1.7.12 does not know these two properties of the job context yet. GitHub documents them, and they
+      # were seen working on a real run. Drop the two -ignore once a new version knows them.
       - name: Lint every workflow, and the templates the plugins start from
         uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 # 1.7.12
         with:
-          args: -color .github/workflows/ci.yml .github/workflows/gate.yml .github/workflows/delivery.yml templates/gate.yml templates/delivery.yml
+          args: -color -ignore workflow_repository -ignore workflow_sha .github/workflows/ci.yml .github/workflows/gate.yml .github/workflows/delivery.yml templates/gate.yml templates/delivery.yml
 
   analyze:
     runs-on: ubuntu-latest
