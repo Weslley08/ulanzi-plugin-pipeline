@@ -2,11 +2,7 @@
 
 The one CI and release pipeline of the Ulanzi Studio plugins. Each plugin keeps two short workflow files that say when it runs and what differs, and the jobs live here, so a fix here reaches all of them.
 
-| Plugin | Uses it from |
-| :- | :- |
-| [Clima Pro](https://github.com/Weslley08/ulanzi-deck-clima-pro) | `develop` |
-| [System Monitor Pro](https://github.com/Weslley08/ulanzi-deck-system-monitor-pro) | `develop` |
-| [Soundpad Controller](https://github.com/Weslley08/ulanzi-deck-soundpad-pro) | `feature/soundpad-controller` |
+It serves [Clima Pro](https://github.com/Weslley08/ulanzi-deck-clima-pro), [System Monitor Pro](https://github.com/Weslley08/ulanzi-deck-system-monitor-pro) and [Soundpad Controller](https://github.com/Weslley08/ulanzi-deck-soundpad-pro).
 
 **This repository has to stay public.** GitHub lets a public repository call reusable workflows only from another public repository, and the plugins are public by policy. Nothing here is secret: it holds no key, and the plugins read their secrets from their own settings.
 

@@ -205,7 +205,7 @@ jobs:
           if [ "$EVENT" != pull_request ]; then accepted='["success","skipped"]'; fi
           problems=$(jq -r --argjson accepted "$accepted" 'to_entries | map(select(.value.result as $result | $accepted | index($result) | not) | "\(.key): \(.value.result)") | join(", ")' <<<"$RESULTS")
           if [ -n "$problems" ]; then
-            echo "::error::This is only the summary, and it has nothing to fix by itself. Open the first of these jobs, because it says what it needs: $problems"
+            echo "::error::This is only the summary, and it has nothing to fix by itself. Open the first of these jobs, because it says what it needs: $problems. A job that reads cancelled was replaced by a newer run, so look at that run instead."
             exit 1
           fi
           echo "Every job passed."
