@@ -22,6 +22,6 @@ The shared CI and release pipeline of the Ulanzi plugins: reusable workflows, th
 
 ## What has not been verified
 
-The flow is tested with a real git and canned `gh` replies, so what GitHub itself does is only seen on a real run. On 2026-11-02 these ran for real, called across repositories: `Next step` opening a pull request, with the token through `secrets: inherit` on Clima Pro and by name on System Monitor, and the whole Gate on all three plugins.
+The flow is tested with a real git and canned `gh` replies, so what GitHub itself does is only seen on a real run. On 2026-11-02 these ran for real on all three plugins, called across repositories: `Next step` opening pull requests, the whole Gate on pull requests and on a push, and the release path up to the draft and the pull request to `main`. On Clima Pro the live tests passed with the real key through `secrets: inherit`, 9 of 9 and 4 of 4 with none skipped, and text written at the top of a draft survived a new validation.
 
-Nothing past that has run yet: the `bump/` pull request, the release path (`build`, `smoke`, `integrations`, `measure`, `draft`), publishing, and `Passed` on a push or the weekly run, when some jobs are skipped on purpose. An environment secret through `secrets: inherit` was seen only within this repository, with a throwaway secret. `flow.mjs` itself has never published a release on GitHub.
+Nothing past that has run yet: the `bump/` pull request, publishing, and the weekly run. `flow.mjs` itself has never published a release on GitHub.
