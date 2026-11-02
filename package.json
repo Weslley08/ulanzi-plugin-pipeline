@@ -1,0 +1,11 @@
+{
+  "name": "ulanzi-plugin-pipeline",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The shared CI and release pipeline of the Ulanzi Studio plugins.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/flow.test.mjs test/flow-commands.test.mjs test/setup-repo.test.mjs test/workflows.test.mjs"
+  }
+}

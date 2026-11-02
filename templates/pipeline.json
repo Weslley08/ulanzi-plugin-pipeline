@@ -1,0 +1,22 @@
+{
+  "name": "Plugin Name",
+  "pluginFolder": "com.ulanzi.example.ulanziPlugin",
+  "merging": "Once published it cannot be taken back: from then on it is what people download.",
+  "validation": {
+    "steps": [
+      "The zip is built once, and it must start on Windows and macOS against a fake host",
+      "`npm run measure` runs"
+    ],
+    "done": [
+      "Tests, coverage and the security checks",
+      "The zip started on Windows and macOS against a fake host"
+    ]
+  },
+  "notes": {
+    "install": "Download `{zip}`, not the **Source code** archives, which will not start, and follow the [setup steps]({blob}/README.md#setup).",
+    "aboutHeading": "About",
+    "about": "This project is not affiliated with Ulanzi.",
+    "checks": "The automated checks passed, and found no known vulnerabilities in the dependencies and no secret patterns. These tools only find problems that are already known. This zip started against a fake host. No test ran on a real deck.",
+    "measuredAgainst": "a fake host"
+  }
+}

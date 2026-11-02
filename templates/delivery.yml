@@ -1,0 +1,37 @@
+name: Delivery
+
+# The jobs are in Weslley08/ulanzi-plugin-pipeline. This file says when they run and what differs for this plugin.
+on:
+  push:
+    branches:
+      # Keep these in step with WORK_PREFIXES in the pipeline's scripts/lib/flow.mjs.
+      - feature/**
+      - feat/**
+      - fix/**
+      - chore/**
+      - docs/**
+      - refactor/**
+      - test/**
+      - ci/**
+      - build/**
+      - perf/**
+      - develop
+      - main
+      - release/v*
+
+permissions:
+  contents: read
+
+concurrency:
+  group: delivery-${{ github.ref }}
+  # On a release branch, a newer merge makes validating the older one pointless.
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/heads/release/') }}
+
+jobs:
+  delivery:
+    uses: Weslley08/ulanzi-plugin-pipeline/.github/workflows/delivery.yml@v1
+    with:
+      # Publishing stays off until the maintainer sets this repository variable to true.
+      publishing: ${{ vars.PUBLISHING_ENABLED }}
+    secrets:
+      AUTOMATION_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}

@@ -1,0 +1,22 @@
+{
+  "name": "Fixture Plugin",
+  "pluginFolder": "com.example.fixture.ulanziPlugin",
+  "merging": "It cannot be taken back: from then on it is what people download.",
+  "validation": {
+    "steps": [
+      "The zip is built once, and it must start and draw a key on Windows and macOS",
+      "`npm run measure` runs"
+    ],
+    "done": [
+      "Tests, coverage and the security checks",
+      "The zip started and drew a key on Windows and macOS"
+    ]
+  },
+  "notes": {
+    "install": "Download `{zip}`, not the **Source code** archives, which will not start, and follow the [setup steps]({blob}/README.md#setup).",
+    "aboutHeading": "Credits",
+    "about": "Data by the fixture service, as its terms require.",
+    "checks": "The automated checks passed on Windows, macOS and Linux. These tools only find problems that are already known.",
+    "measuredAgainst": "a fake host"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "fixture-plugin",
+  "version": "1.4.2",
+  "private": true,
+  "dependencies": {
+    "ws": "8.18.0"
+  }
+}

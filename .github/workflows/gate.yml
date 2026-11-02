@@ -1,0 +1,211 @@
+name: Gate
+
+# Everything a change must pass before it merges: the branch rules, tests, coverage, the zip and known
+# vulnerabilities. Each plugin calls this from its own gate.yml, which says when it runs.
+on:
+  workflow_call:
+    inputs:
+      test-os:
+        description: JSON list of the systems the tests run on.
+        type: string
+        default: '["windows-latest","macos-latest","ubuntu-latest"]'
+      codeql-config:
+        description: CodeQL configuration, for the paths it should leave out.
+        type: string
+        default: ''
+    secrets:
+      AUTOMATION_TOKEN:
+        description: Reads the draft for a pull request to main. Forks and Dependabot do not have it.
+        required: false
+
+# pull_request (never pull_request_target) gives forks no secrets and a read-only token.
+permissions:
+  contents: read
+
+jobs:
+  rules:
+    name: Branch flow
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The same commit of the pipeline as this file, so a pull request cannot change what checks it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .pipeline
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: node .pipeline/scripts/flow.mjs check-pull-request
+        env:
+          PR_BASE: ${{ github.base_ref }}
+          PR_HEAD: ${{ github.head_ref }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # Reading a draft takes write access. A fork gets no secret, and this job runs no npm.
+          GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+
+  # Each job below waits for the rules, so a wrong base or an unticked box does not run everything for nothing.
+  # A skipped job does not hide a failure: the rules are red in that same run, and they block the merge.
+  workflows:
+    name: Workflows
+    needs: rules
+    if: ${{ !failure() && !cancelled() && github.event_name != 'schedule' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Lint every workflow
+        uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 # 1.7.12
+        with:
+          args: -color
+
+  test:
+    name: Test (${{ matrix.os }})
+    needs: rules
+    if: ${{ !failure() && !cancelled() && github.event_name != 'schedule' }}
+    runs-on: ${{ matrix.os }}
+    # A hang must fail early instead of holding a runner for six hours.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.test-os) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm run setup
+      - run: npm run typecheck
+      - run: npm test
+
+  coverage:
+    name: Coverage
+    needs: rules
+    if: ${{ !failure() && !cancelled() && github.event_name != 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm run setup
+      - run: npm run test:coverage
+
+  package:
+    name: Package
+    needs: rules
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm run setup
+      - run: npm run package
+      - run: npm run verify:package
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: plugin-zip
+          path: dist/*.zip
+          retention-days: 14
+          if-no-files-found: error
+
+  security:
+    name: Security
+    needs: rules
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm run setup
+      - run: npm run audit
+      - run: npm run --if-present check:licenses
+      - run: npm run check:sdk
+        if: github.event_name != 'schedule'
+      # The SDK is copied into the plugin, so npm audit and Dependabot never see it.
+      - name: Ulanzi SDK copies and upstream changes
+        run: npm run check:sdk -- --upstream
+        if: github.event_name == 'schedule'
+      - run: npm run package
+      - run: npm run check:secrets
+
+  # CodeQL names its analyses after the plugin's gate.yml and this job. After renaming either, update setup-repo.mjs
+  # and run it: while the old name lasts, the CodeQL check on pull requests goes neutral, and new alerts do not block them.
+  analyze:
+    needs: rules
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        with:
+          languages: javascript-typescript
+          config: ${{ inputs.codeql-config }}
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+
+  review:
+    needs: rules
+    if: ${{ !failure() && !cancelled() && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: low
+
+  # The one check each repository requires, so a job can change here without touching its settings.
+  # Add every new job to needs, or it stops blocking merges.
+  passed:
+    name: Passed
+    needs: [rules, workflows, test, coverage, package, security, analyze, review]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job above must have passed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          # On a pull request every job runs, so a skipped one means something stopped it.
+          accepted='["success"]'
+          if [ "$EVENT" != pull_request ]; then accepted='["success","skipped"]'; fi
+          problems=$(jq -r --argjson accepted "$accepted" 'to_entries | map(select(.value.result as $result | $accepted | index($result) | not) | "\(.key): \(.value.result)") | join(", ")' <<<"$RESULTS")
+          if [ -n "$problems" ]; then
+            echo "::error::This is only the summary, and it has nothing to fix by itself. Open the first of these jobs, because it says what it needs: $problems"
+            exit 1
+          fi
+          echo "Every job passed."

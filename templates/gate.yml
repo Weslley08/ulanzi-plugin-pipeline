@@ -1,0 +1,30 @@
+name: Gate
+
+# The jobs are in Weslley08/ulanzi-plugin-pipeline. This file says when they run and what differs for this plugin.
+# It also runs each week, because problems get found after the last pull request.
+on:
+  pull_request:
+    # edited: changing the base or ticking a box has to run the branch rules again.
+    types: [opened, edited, reopened, synchronize]
+  push:
+    branches: [main, develop]
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    # A called workflow can only keep or lower these, so what its CodeQL job needs has to be granted here.
+    permissions:
+      contents: read
+      security-events: write
+    uses: Weslley08/ulanzi-plugin-pipeline/.github/workflows/gate.yml@v1
+    secrets:
+      AUTOMATION_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
