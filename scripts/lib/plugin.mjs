@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // What a plugin repository tells the pipeline about itself. It is only ever read as data, because the
-// pipeline runs next to AUTOMATION_TOKEN and a pull request can change this file.
+// pipeline runs next to the App's token and a pull request can change this file.
 export const CONFIG_FILE = '.github/pipeline.json';
 
 const PLUGIN_FOLDER = /^[A-Za-z0-9][A-Za-z0-9.-]*\.ulanziPlugin$/;

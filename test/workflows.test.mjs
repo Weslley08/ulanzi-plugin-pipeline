@@ -30,7 +30,7 @@ test('the bump branches stay out of the workflow that opens pull requests, becau
 
 test('a missing token reaches the step that names it, instead of stopping at checkout', () => {
   for (const file of readdirSync(WORKFLOWS)) {
-    assert.doesNotMatch(workflow(file), /^\s+token: \$\{\{ secrets\.AUTOMATION_TOKEN \}\}$/m, file);
+    assert.doesNotMatch(workflow(file), /^\s+token: \$\{\{ steps\.app\.outputs\.token \}\}$/m, file);
   }
 });
 
@@ -45,16 +45,28 @@ test('the shared workflows can only be called, and their callers name the same f
 test('no job that holds the token runs anything from npm', () => {
   for (const file of SHARED) {
     for (const [id, text] of Object.entries(jobs(workflow(file)))) {
-      if (!text.includes('secrets.AUTOMATION_TOKEN')) continue;
+      if (!text.includes('steps.app.outputs.token')) continue;
       assert.doesNotMatch(text.replace(/^\s*#.*$/gm, ''), /\bnpm\b/, `${file}: ${id}`);
+    }
+  }
+});
+
+test('the App key is read by the step that makes the token and nowhere else', () => {
+  for (const file of SHARED) {
+    for (const [id, text] of Object.entries(jobs(workflow(file)))) {
+      const reads = text.match(/^.*secrets\.APP_PRIVATE_KEY.*$/gm) ?? [];
+      if (!reads.length) continue;
+      assert.deepEqual(reads.map((line) => line.trim()), ['private-key: ${{ secrets.APP_PRIVATE_KEY }}'], `${file}: ${id}`);
+      assert.match(text, /uses: actions\/create-github-app-token@[0-9a-f]{40} # v\d/, `${file}: ${id}`);
+      assert.match(text, /^ {4}env:\n(?: {6}#.*\n)? {6}APP_CLIENT_ID: \$\{\{ secrets\.APP_CLIENT_ID \}\}$/m, `${file}: ${id}`);
     }
   }
 });
 
 test('the token only reaches the steps that need it', () => {
   for (const file of SHARED) {
-    const holders = Object.entries(jobs(workflow(file))).filter(([, text]) => text.includes('secrets.AUTOMATION_TOKEN')).map(([id]) => id);
-    assert.deepEqual(holders, file === 'gate.yml' ? ['rules'] : ['next', 'draft'], file);
+    const holders = Object.entries(jobs(workflow(file))).filter(([, text]) => text.includes('steps.app.outputs.token')).map(([id]) => id);
+    assert.deepEqual(holders, file === 'gate.yml' ? ['rules', 'approval'] : ['next', 'draft'], file);
   }
 });
 

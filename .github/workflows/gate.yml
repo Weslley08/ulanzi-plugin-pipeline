@@ -14,8 +14,11 @@ on:
         type: string
         default: ''
     secrets:
-      AUTOMATION_TOKEN:
-        description: Reads the draft for a pull request to main. Forks and Dependabot do not have it.
+      APP_CLIENT_ID:
+        description: The client ID of the GitHub App that does the writing. A fork does not have it.
+        required: false
+      APP_PRIVATE_KEY:
+        description: The private key of that App.
         required: false
 
 # pull_request (never pull_request_target) gives forks no secrets and a read-only token.
@@ -25,9 +28,22 @@ permissions:
 jobs:
   rules:
     name: Branch flow
-    if: github.event_name == 'pull_request'
+    # A review runs the whole Gate again, so the newest result for this commit is a complete one.
+    if: (github.event_name == 'pull_request' || github.event_name == 'pull_request_review')
     runs-on: ubuntu-latest
+    env:
+      # The client ID is not secret. A step's if cannot read secrets, but it can read this.
+      APP_CLIENT_ID: ${{ secrets.APP_CLIENT_ID }}
     steps:
+      - id: app
+        # A fork or Dependabot has no secrets, so this is skipped and the steps below find no token.
+        if: ${{ env.APP_CLIENT_ID != '' }}
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: read
+          permission-pull-requests: read
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -46,10 +62,9 @@ jobs:
           PR_BASE: ${{ github.base_ref }}
           PR_HEAD: ${{ github.head_ref }}
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-          PR_BODY: ${{ github.event.pull_request.body }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           # Reading a draft takes write access. A fork gets no secret, and this job runs no npm.
-          GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
 
   # Each job below waits for the rules, so a wrong base or an unticked box does not run everything for nothing.
@@ -177,7 +192,7 @@ jobs:
 
   review:
     needs: rules
-    if: ${{ !failure() && !cancelled() && github.event_name == 'pull_request' }}
+    if: ${{ !failure() && !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_review') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -187,11 +202,52 @@ jobs:
         with:
           fail-on-severity: low
 
+  # Merging into main publishes, and CI cannot see the device. The maintainer's approval stands in for that, so it is
+  # checked on every pull request and passes at once for any base but main. Holds the token, so it runs no npm.
+  approval:
+    name: Maintainer approval
+    needs: rules
+    if: ${{ !failure() && !cancelled() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_review') }}
+    runs-on: ubuntu-latest
+    env:
+      # The client ID is not secret. A step's if cannot read secrets, but it can read this.
+      APP_CLIENT_ID: ${{ secrets.APP_CLIENT_ID }}
+    steps:
+      - id: app
+        # A fork or Dependabot has no secrets, so this is skipped and the steps below find no token.
+        if: ${{ env.APP_CLIENT_ID != '' }}
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: read
+          permission-pull-requests: read
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .pipeline
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: node .pipeline/scripts/flow.mjs check-approval
+        env:
+          PR_BASE: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+
   # The one check each repository requires, so a job can change here without touching its settings.
   # Add every new job to needs, or it stops blocking merges.
   passed:
     name: Passed
-    needs: [rules, workflows, test, coverage, package, security, analyze, review]
+    needs: [rules, workflows, test, coverage, package, security, analyze, review, approval]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -202,7 +258,7 @@ jobs:
         run: |
           # On a pull request every job runs, so a skipped one means something stopped it.
           accepted='["success"]'
-          if [ "$EVENT" != pull_request ]; then accepted='["success","skipped"]'; fi
+          if [ "$EVENT" != pull_request ] && [ "$EVENT" != pull_request_review ]; then accepted='["success","skipped"]'; fi
           problems=$(jq -r --argjson accepted "$accepted" 'to_entries | map(select(.value.result as $result | $accepted | index($result) | not) | "\(.key): \(.value.result)") | join(", ")' <<<"$RESULTS")
           if [ -n "$problems" ]; then
             echo "::error::This is only the summary, and it has nothing to fix by itself. Open the first of these jobs, because it says what it needs: $problems. A job that reads cancelled was replaced by a newer run, so look at that run instead."

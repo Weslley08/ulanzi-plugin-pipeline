@@ -1,11 +1,11 @@
 // What the workflows run to move a change along the branch flow. The rules are in lib/flow.mjs.
-// It uses Node's own modules only, and its jobs skip npm, because it runs next to AUTOMATION_TOKEN.
+// It uses Node's own modules only, and its jobs skip npm, because it runs next to the App's token.
 // It runs from the plugin's folder and comes from the pipeline, so a pull request cannot change what checks it.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  DEVELOP, MAIN, bumpBranch, bumpPullRequest, compareVersions, draftNotes, flowProblem, mainPullRequest, mergedBranches,
+  DEVELOP, MAIN, approvalProblem, bumpBranch, bumpPullRequest, compareVersions, draftNotes, flowProblem, mainPullRequest, mergedBranches,
   notesStillToWrite, planDevelop, refreshNotes, releaseBranch, releasePullRequest, syncPullRequest, versionOfReleaseBranch, versionTags, workPullRequest,
 } from './lib/flow.mjs';
 import { manifestVersion, readPlugin, setVersion, versionMismatches } from './lib/plugin.mjs';
@@ -40,7 +40,7 @@ function env(name) {
  * "Approve workflows to run", so these steps use a token of the maintainer's.
  */
 function requireAutomationToken() {
-  if (!process.env.GH_TOKEN) fail('The AUTOMATION_TOKEN secret is missing or expired. "Setting up a plugin" in the README of ulanzi-plugin-pipeline says how to set it.');
+  if (!process.env.GH_TOKEN) fail('There is no token from the GitHub App, because APP_CLIENT_ID or APP_PRIVATE_KEY is missing. "Setting up a plugin" in the README of ulanzi-plugin-pipeline says how to set them.');
 }
 
 const tagsOnRepo = () => versionTags(lines(git('tag', '--list', 'v*')));
@@ -89,7 +89,7 @@ function draftProblem() {
   const tag = `v${version}`;
   if (!findDraft(tag)) return `There is no draft for ${tag} yet. Wait for the Delivery run on ${env('PR_HEAD')}, then run this check again.`;
   const { body, targetCommitish } = ghJson('release', 'view', tag, '--json', 'body,targetCommitish');
-  if (notesStillToWrite(body)) return `Write the top of the notes of the draft ${tag} for customers, then run this check again, or change a box.`;
+  if (notesStillToWrite(body)) return `Write the top of the notes of the draft ${tag} for customers, then run this check again.`;
   if (targetCommitish !== env('PR_HEAD_SHA')) return `The draft ${tag} holds ${targetCommitish}, not the end of this branch. Wait for the Delivery run, then run this check again.`;
   return null;
 }
@@ -101,10 +101,26 @@ function checkPullRequest() {
     head: env('PR_HEAD'),
     sameRepo: process.env.PR_HEAD_REPO === process.env.GITHUB_REPOSITORY,
     version: manifestVersion(workDir, plugin),
-    body: process.env.PR_BODY,
   }) ?? draftProblem();
   if (problem) fail(problem);
   console.log('This pull request follows the branch flow.');
+}
+
+/** The check called Maintainer approval. Only a pull request to main needs one, because merging there publishes. */
+function checkApproval() {
+  if (env('PR_BASE') !== MAIN) return console.log('Only a pull request to main needs approval.');
+  if (!process.env.GH_TOKEN) fail('There is no token from the GitHub App, and it is how this check reads who may approve. APP_CLIENT_ID or APP_PRIVATE_KEY is missing.');
+  const reviews = ghJson('api', '--paginate', '--slurp', `repos/{owner}/{repo}/pulls/${env('PR_NUMBER')}/reviews`)
+    .flat()
+    .map(({ user, state, commit_id: commit }) => ({ user: user?.login, state, commit }));
+  const permissions = new Map();
+  const permissionOf = (user) => {
+    if (!permissions.has(user)) permissions.set(user, ghJson('api', `repos/{owner}/{repo}/collaborators/${user}/permission`).permission);
+    return permissions.get(user);
+  };
+  const problem = approvalProblem({ author: env('PR_AUTHOR'), headSha: env('PR_HEAD_SHA'), reviews, permissionOf });
+  if (problem) fail(problem);
+  return console.log('The maintainer approved the last commit of this pull request.');
 }
 
 function closeOtherBumps(open, wanted) {
@@ -312,6 +328,7 @@ const COMMANDS = {
   next,
   'open-pull-request': openPullRequest,
   'check-pull-request': checkPullRequest,
+  'check-approval': checkApproval,
   'after-develop': afterDevelop,
   'check-release': checkRelease,
   'draft-release': draftRelease,

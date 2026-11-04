@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
-  compareVersions, draftNotes, flowProblem, mainPullRequest, mergedBranches, nextVersion, notesStillToWrite,
+  approvalProblem, compareVersions, draftNotes, flowProblem, mainPullRequest, mergedBranches, nextVersion, notesStillToWrite,
   planDevelop, refreshNotes, releasePullRequest, versionOfReleaseBranch, versionTags, workPullRequest,
 } from '../scripts/lib/flow.mjs';
 import { manifestVersion, readPlugin, setVersion, versionMismatches } from '../scripts/lib/plugin.mjs';
@@ -15,7 +15,6 @@ const FIXTURE = join(root, 'test', 'fixtures', 'plugin');
 const plugin = readPlugin(FIXTURE);
 const PLUGIN_FOLDER = plugin.pluginFolder;
 const VERSION_FILES = ['package.json', 'package-lock.json', `${PLUGIN_FOLDER}/package.json`, `${PLUGIN_FOLDER}/package-lock.json`, `${PLUGIN_FOLDER}/manifest.json`];
-const TICKED = '- [x] Ran docs/VERIFY.md on a real device';
 
 test('versions compare as numbers, not as text', () => {
   assert.ok(compareVersions('1.10.0', '1.9.0') > 0);
@@ -96,7 +95,7 @@ test('a release branch takes only develop from this repository, at its own versi
 });
 
 test('main takes only a release branch, and says what to do about anything else', () => {
-  const pr = { base: 'main', version: '1.4.1', body: TICKED };
+  const pr = { base: 'main', version: '1.4.1' };
   assert.equal(flowProblem({ ...pr, head: 'release/v1.4.1', sameRepo: true }), null);
   assert.match(flowProblem({ ...pr, head: 'develop', sameRepo: true }), /Change the base of this one to develop/);
   assert.match(flowProblem({ ...pr, head: 'dependabot/npm_and_yarn/ws-8', sameRepo: true }), /Change the base of this one to develop/);
@@ -104,22 +103,31 @@ test('main takes only a release branch, and says what to do about anything else'
   assert.match(flowProblem({ ...pr, head: 'release/v1.4.0', sameRepo: true }), /says version 1\.4\.1/);
 });
 
-test('main waits for the device box, because merging there publishes', () => {
-  const pr = { base: 'main', head: 'release/v1.4.1', sameRepo: true, version: '1.4.1' };
-  assert.match(flowProblem({ ...pr, body: '- [ ] Ran docs/VERIFY.md on a real device' }), /Run docs\/VERIFY\.md on a device/);
-  assert.match(flowProblem({ ...pr, body: '- [x] Something else\nsee docs/VERIFY.md' }), /Run docs\/VERIFY\.md/);
-  assert.match(flowProblem({ ...pr, body: null }), /Run docs\/VERIFY\.md/);
-  assert.equal(flowProblem({ ...pr, body: `intro\n\n  ${TICKED}\n` }), null);
-  assert.equal(flowProblem({ ...pr, body: '* [X] Ran docs/VERIFY.md' }), null);
+const REVIEW = { user: 'maint', state: 'APPROVED', commit: 'abc' };
+const approval = (reviews, extra = {}) => approvalProblem({ author: 'bot', headSha: 'abc', reviews, permissionOf: (user) => (user === 'maint' ? 'admin' : 'write'), ...extra });
+
+test('main waits for the maintainer, because merging there publishes', () => {
+  assert.equal(approval([REVIEW]), null);
+  assert.match(approval([]), /Nobody has approved/);
+  assert.match(approval([{ ...REVIEW, state: 'COMMENTED' }]), /Nobody has approved/);
+  assert.match(approval([{ ...REVIEW, user: 'someone' }]), /Nobody has approved/, 'write access is not enough');
+  assert.match(approval([REVIEW], { author: 'maint' }), /Nobody has approved/, 'the one who opened it cannot approve it');
 });
 
-test('the pull request to main starts with its boxes empty, and only ticking them all passes the check', () => {
+test('an approval counts for the last commit only, and a later review of the same person replaces it', () => {
+  assert.match(approval([{ ...REVIEW, commit: 'older' }]), /earlier commit no longer counts/);
+  assert.equal(approval([{ ...REVIEW, commit: 'older' }, REVIEW]), null);
+  assert.equal(approval([REVIEW, { ...REVIEW, state: 'COMMENTED' }]), null, 'a comment decides nothing');
+  assert.match(approval([REVIEW, { ...REVIEW, state: 'DISMISSED' }]), /Nobody has approved/);
+  assert.match(approval([REVIEW, { ...REVIEW, state: 'CHANGES_REQUESTED' }]), /asked for changes/);
+  assert.match(approval([REVIEW, { user: 'other', state: 'CHANGES_REQUESTED', commit: 'abc' }]), /other asked for changes/);
+});
+
+test('the pull request to main says the approval is what allows the merge, with no boxes left to tick', () => {
   const { body } = mainPullRequest({ plugin, version: '1.4.1', repository: 'a/b', commit: 'abc', measure: 'Memory 60 MB\n', publishing: true });
-  const pr = { base: 'main', head: 'release/v1.4.1', sameRepo: true, version: '1.4.1' };
-  assert.match(flowProblem({ ...pr, body }), /Run docs\/VERIFY\.md/);
-  assert.match(flowProblem({ ...pr, body: body.replace('- [ ] Ran', '- [x] Ran') }), /Tick every box/);
-  assert.match(flowProblem({ ...pr, body: body.replace('- [ ] Replaced', '- [x] Replaced') }), /Run docs\/VERIFY\.md/);
-  assert.equal(flowProblem({ ...pr, body: body.replaceAll('- [ ]', '- [x]') }), null);
+  assert.doesNotMatch(body, /\[ \]/);
+  assert.match(body, /maintainer's approval is what allows the merge/);
+  assert.match(body, /takes back the approval/);
   assert.match(body, /Memory 60 MB/);
 });
 
