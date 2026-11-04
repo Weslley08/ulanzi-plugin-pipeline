@@ -42,7 +42,8 @@ jobs:
         with:
           client-id: ${{ secrets.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          permission-contents: read
+          # Reading a draft release takes write access. With read, the draft is not there and every pull request to main fails.
+          permission-contents: write
           permission-pull-requests: read
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -38,6 +38,10 @@ test('the pull request is read from the event, because base_ref and head_ref are
   for (const file of SHARED) assert.doesNotMatch(workflow(file), /github\.(base_ref|head_ref)/, file);
 });
 
+test('Branch flow reads the draft, which takes write access to contents', () => {
+  assert.match(jobs(workflow('gate.yml')).rules, /permission-contents: write/);
+});
+
 test('the shared workflows can only be called, and their callers name the same files', () => {
   for (const file of SHARED) {
     assert.doesNotMatch(workflow(file), /^ {2}(push|pull_request|pull_request_target|schedule|workflow_dispatch):/m, file);
