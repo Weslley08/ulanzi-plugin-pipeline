@@ -59,8 +59,8 @@ jobs:
           node-version-file: .nvmrc
       - run: node .pipeline/scripts/flow.mjs check-pull-request
         env:
-          PR_BASE: ${{ github.base_ref }}
-          PR_HEAD: ${{ github.head_ref }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           # Reading a draft takes write access. A fork gets no secret, and this job runs no npm.
@@ -236,7 +236,7 @@ jobs:
           node-version-file: .nvmrc
       - run: node .pipeline/scripts/flow.mjs check-approval
         env:
-          PR_BASE: ${{ github.base_ref }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}

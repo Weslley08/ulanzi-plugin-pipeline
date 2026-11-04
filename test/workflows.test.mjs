@@ -34,6 +34,10 @@ test('a missing token reaches the step that names it, instead of stopping at che
   }
 });
 
+test('the pull request is read from the event, because base_ref and head_ref are empty on a review', () => {
+  for (const file of SHARED) assert.doesNotMatch(workflow(file), /github\.(base_ref|head_ref)/, file);
+});
+
 test('the shared workflows can only be called, and their callers name the same files', () => {
   for (const file of SHARED) {
     assert.doesNotMatch(workflow(file), /^ {2}(push|pull_request|pull_request_target|schedule|workflow_dispatch):/m, file);
