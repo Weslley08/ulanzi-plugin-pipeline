@@ -20,7 +20,6 @@ const git = (...args) => run('git', args);
 const gh = (...args) => run('gh', args);
 const ghJson = (...args) => JSON.parse(gh(...args));
 const lines = (text) => text.split('\n').map((line) => line.trim()).filter(Boolean);
-const publishingIsOn = () => process.env.PUBLISHING_ENABLED === 'true';
 
 let plugin;
 
@@ -235,7 +234,6 @@ function openMainPullRequest() {
     repository: env('GITHUB_REPOSITORY'),
     commit: env('GITHUB_SHA'),
     measure: readFileSync(join(workDir, 'measure', 'measure.txt'), 'utf8'),
-    publishing: publishingIsOn(),
   });
   const [existing] = ghJson('pr', 'list', '--head', branch, '--base', MAIN, '--state', 'open', '--json', 'number');
   if (existing) {
@@ -258,8 +256,6 @@ function publish() {
     finishRelease(version);
     return undefined;
   }
-  // Until the maintainer decides, the draft stays a draft, and this is not a failure.
-  if (!publishingIsOn()) return console.log(`::notice::Publishing is off, so ${tag} stays a draft. Set the repository variable PUBLISHING_ENABLED to true once the maintainer approves publishing.`);
   // The Community Store orders by publish date, so this would show an older version as the current one.
   if (tags.length && compareVersions(version, tags.at(-1)) < 0) fail(`v${tags.at(-1)} is already out, and ${tag} is older, so it stays a draft.`);
   if (!findDraft(tag)) fail(`There is no draft for ${tag}.`);

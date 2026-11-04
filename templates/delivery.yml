@@ -30,9 +30,6 @@ concurrency:
 jobs:
   delivery:
     uses: Weslley08/ulanzi-plugin-pipeline/.github/workflows/delivery.yml@v1
-    with:
-      # Publishing stays off until the maintainer sets this repository variable to true.
-      publishing: ${{ vars.PUBLISHING_ENABLED }}
     secrets:
       APP_CLIENT_ID: ${{ secrets.APP_CLIENT_ID }}
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

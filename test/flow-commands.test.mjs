@@ -36,7 +36,6 @@ function flow(command, { replies = [], env = {} } = {}) {
       ...process.env,
       GH_TOKEN: 'fake',
       GITHUB_REPOSITORY: 'owner/repo',
-      PUBLISHING_ENABLED: 'true',
       GITHUB_SHA: git('rev-parse', 'HEAD'),
       FAKE_GH_LOG: log,
       FAKE_GH_REPLIES: JSON.stringify(replies),
@@ -706,36 +705,6 @@ test('an unknown command says how to use it', () => {
   const { status, stderr } = flow('nope');
   assert.equal(status, 1);
   assert.match(stderr, /Usage/);
-});
-
-test('until the maintainer turns publishing on, merging into main leaves the draft alone', () => {
-  const { version, validated } = mergedRelease();
-  for (const value of ['', 'false']) {
-    const { status, calls, stdout } = flow('publish', {
-      env: { PUBLISHING_ENABLED: value },
-      replies: [['release list', [{ tagName: `v${version}`, isDraft: true }]], ['release view', { targetCommitish: validated, body: WRITTEN }]],
-    });
-    assert.equal(status, 0);
-    assert.match(stdout, /Publishing is off/);
-    assert.equal(callsTo(calls, 'release', 'edit').length, 0);
-    assert.equal(callsTo(calls, 'api', '-X', 'DELETE').length, 0);
-  }
-});
-
-test('a release published by hand while publishing is off still gets its branch removed', () => {
-  const version = currentVersion();
-  onOrigin('branch', `release/v${version}`, 'main');
-  const { status, calls } = flow('publish', { env: { PUBLISHING_ENABLED: '' } });
-  assert.equal(status, 0);
-  assert.equal(callsTo(calls, 'api', '-X', 'DELETE')[0][3], `repos/{owner}/{repo}/git/refs/heads/release/v${version}`);
-});
-
-test('with publishing off, the pull request to main does not promise that merging publishes', () => {
-  const env = { ...releaseBranchChecks(nextPatch(currentVersion())), PUBLISHING_ENABLED: '' };
-  const { calls } = flow('open-main-pull-request', { env, replies: [['pr list', []]] });
-  const body = argAfter(callsTo(calls, 'pr', 'create')[0], '--body');
-  assert.match(body, /^Publishing is off in this repository/);
-  assert.doesNotMatch(body, /the merge does it/);
 });
 
 test('the draft and its zip carry the name and folder from the plugin, not from any other plugin', () => {

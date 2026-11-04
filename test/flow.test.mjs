@@ -124,7 +124,7 @@ test('an approval counts for the last commit only, and a later review of the sam
 });
 
 test('the pull request to main says the approval is what allows the merge, with no boxes left to tick', () => {
-  const { body } = mainPullRequest({ plugin, version: '1.4.1', repository: 'a/b', commit: 'abc', measure: 'Memory 60 MB\n', publishing: true });
+  const { body } = mainPullRequest({ plugin, version: '1.4.1', repository: 'a/b', commit: 'abc', measure: 'Memory 60 MB\n'});
   assert.doesNotMatch(body, /\[ \]/);
   assert.match(body, /maintainer's approval is what allows the merge/);
   assert.match(body, /takes back the approval/);

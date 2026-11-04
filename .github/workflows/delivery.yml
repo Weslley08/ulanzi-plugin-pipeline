@@ -25,10 +25,6 @@ on:
         description: The name of the secret they read as an environment variable. Empty needs none.
         type: string
         default: ''
-      publishing:
-        description: Anything but "true" leaves the draft alone when a release merges into main.
-        type: string
-        default: 'true'
     secrets:
       APP_CLIENT_ID:
         description: The client ID of the GitHub App that does the writing. A fork does not have it.
@@ -83,7 +79,6 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
           BRANCH: ${{ github.ref_name }}
-          PUBLISHING_ENABLED: ${{ inputs.publishing }}
 
   build:
     name: Build
@@ -265,4 +260,3 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
           BRANCH: ${{ github.ref_name }}
-          PUBLISHING_ENABLED: ${{ inputs.publishing }}

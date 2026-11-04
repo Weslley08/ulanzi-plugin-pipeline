@@ -138,13 +138,11 @@ export function releasePullRequest({ plugin, version, branches }) {
   };
 }
 
-export function mainPullRequest({ plugin, version, repository, commit, measure, publishing }) {
+export function mainPullRequest({ plugin, version, repository, commit, measure }) {
   const draft = `**${plugin.name} ${version}** from [Releases](https://github.com/${repository}/releases)`;
-  const opening = publishing
-    ? `Merging this publishes the draft ${draft} as the final release.`
-    : `Publishing is off in this repository, so merging this leaves the draft ${draft} as a draft until the maintainer sets the \`PUBLISHING_ENABLED\` repository variable to \`true\`.`;
+  const opening = `Merging this publishes the draft ${draft} as the final release.`;
   const done = plugin.validation.done.map((line) => `- ${line}`).join('\n');
-  const byHand = publishing ? ' Do not publish the draft by hand: the merge does it.' : '';
+  const byHand = ' Do not publish the draft by hand: the merge does it.';
   return {
     title: `Publish v${version}`,
     body: `${opening} ${plugin.merging}\n\n## Done automatically on ${commit}\n\n${done}\n\n\`\`\`\n${measure.trim()}\n\`\`\`\n\n## Before merging\n\nCI cannot see the device, and customers read the notes. Write the notes first, because the check reads the draft when the description changes or someone reviews.${byHand} A new merge into this branch validates again, replaces the zip and the technical details, keeps the text you wrote above them, and takes back the approval.
