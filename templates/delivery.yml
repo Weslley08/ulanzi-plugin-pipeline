@@ -34,4 +34,5 @@ jobs:
       # Publishing stays off until the maintainer sets this repository variable to true.
       publishing: ${{ vars.PUBLISHING_ENABLED }}
     secrets:
-      AUTOMATION_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
+      APP_CLIENT_ID: ${{ secrets.APP_CLIENT_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

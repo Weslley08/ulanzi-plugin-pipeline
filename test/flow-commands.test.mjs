@@ -137,7 +137,7 @@ test('without the token the step fails and says what to set, instead of looking 
   for (const command of ['next', 'open-pull-request', 'after-develop', 'draft-release', 'open-main-pull-request', 'publish', 'sync-develop']) {
     const { status, stderr } = flow(command, { env: { GH_TOKEN: '', BRANCH: 'fix/thing' } });
     assert.equal(status, 1, command);
-    assert.match(stderr, /AUTOMATION_TOKEN/, command);
+    assert.match(stderr, /GitHub App/, command);
   }
 });
 
@@ -374,21 +374,21 @@ test('validating again updates the draft instead of adding one, and keeps what a
   assert.ok(callsTo(calls, 'release', 'upload')[0].includes('--clobber'));
 });
 
-test('the pull request to main opens with its boxes empty', () => {
+test('the pull request to main opens asking for the maintainer approval', () => {
   const version = nextPatch(currentVersion());
   const env = releaseBranchChecks(version);
   const { calls } = flow('open-main-pull-request', { env, replies: [['pr list', []]] });
   const [create] = callsTo(calls, 'pr', 'create');
   assert.equal(argAfter(create, '--base'), 'main');
   assert.equal(argAfter(create, '--head'), `release/v${version}`);
-  assert.match(argAfter(create, '--body'), /- \[ \] Ran docs\/VERIFY\.md/);
+  assert.match(argAfter(create, '--body'), /approval is what allows the merge/);
 });
 
-test('validating again clears boxes already ticked, because that test was of older code', () => {
+test('validating again rewrites the description, and with it the old approval stops counting', () => {
   const env = releaseBranchChecks(nextPatch(currentVersion()));
   const { calls } = flow('open-main-pull-request', { env, replies: [['pr list', [{ number: 5 }]]] });
   assert.equal(callsTo(calls, 'pr', 'create').length, 0);
-  assert.match(argAfter(callsTo(calls, 'pr', 'edit')[0], '--body'), /- \[ \] Ran docs\/VERIFY\.md/);
+  assert.match(argAfter(callsTo(calls, 'pr', 'edit')[0], '--body'), /takes back the approval/);
 });
 
 const WRITTEN = 'Better alerts.\n\n## Technical details\n\nNumbers.';
@@ -404,7 +404,7 @@ function mergedRelease() {
   return { version, validated };
 }
 
-const RELEASE_PR = (version) => ({ PR_BASE: 'main', PR_HEAD: `release/v${version}`, PR_HEAD_REPO: 'owner/repo', PR_HEAD_SHA: 'abc123', PR_BODY: '- [x] Ran docs/VERIFY.md on a device' });
+const RELEASE_PR = (version) => ({ PR_BASE: 'main', PR_HEAD: `release/v${version}`, PR_HEAD_REPO: 'owner/repo', PR_HEAD_SHA: 'abc123' });
 
 function checkReleasePr(replies, env = {}) {
   const version = currentVersion();
@@ -669,11 +669,37 @@ test('a draft that has to wait does not stop main from going back to develop, an
 });
 
 test('Branch flow reads the pull request from the environment and fails with the reason', () => {
-  const env = { PR_BASE: 'main', PR_HEAD: 'feat/x', PR_HEAD_REPO: 'owner/repo', PR_BODY: '' };
+  const env = { PR_BASE: 'main', PR_HEAD: 'feat/x', PR_HEAD_REPO: 'owner/repo' };
   const { status, stderr } = flow('check-pull-request', { env });
   assert.equal(status, 1);
   assert.match(stderr, /must come from a release/);
   assert.equal(flow('check-pull-request', { env: { ...env, PR_BASE: 'develop' } }).status, 0);
+});
+
+const APPROVAL_ENV = { PR_BASE: 'main', PR_NUMBER: '7', PR_AUTHOR: 'bot', PR_HEAD_SHA: 'abc123' };
+const review = (user, state, commit = 'abc123') => ({ user: { login: user }, state, commit_id: commit });
+
+test('Maintainer approval passes at once for any base but main, without reading anything', () => {
+  const { status, calls } = flow('check-approval', { env: { ...APPROVAL_ENV, PR_BASE: 'develop' } });
+  assert.equal(status, 0);
+  assert.equal(calls.length, 0);
+});
+
+test('Maintainer approval reads the reviews and the permission of the approver, and passes for an admin', () => {
+  const { status, calls, stderr } = flow('check-approval', { env: APPROVAL_ENV, replies: [['api --paginate --slurp repos/{owner}/{repo}/pulls/7/reviews', [[review('maint', 'APPROVED')]]], ['api repos/{owner}/{repo}/collaborators/maint/permission', { permission: 'admin' }]] });
+  assert.equal(status, 0, stderr);
+  assert.equal(callsTo(calls, 'api').length, 2);
+});
+
+test('Maintainer approval fails with nobody, with a writer only, and with the token missing', () => {
+  const none = flow('check-approval', { env: APPROVAL_ENV, replies: [['api --paginate', [[]]]] });
+  assert.equal(none.status, 1);
+  assert.match(none.stderr, /Nobody has approved/);
+  const writer = flow('check-approval', { env: APPROVAL_ENV, replies: [['api --paginate', [[review('helper', 'APPROVED')]]], ['api repos/{owner}/{repo}/collaborators/helper', { permission: 'write' }]] });
+  assert.equal(writer.status, 1);
+  const noToken = flow('check-approval', { env: { ...APPROVAL_ENV, GH_TOKEN: '' } });
+  assert.equal(noToken.status, 1);
+  assert.match(noToken.stderr, /GitHub App/);
 });
 
 test('an unknown command says how to use it', () => {

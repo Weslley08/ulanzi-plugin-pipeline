@@ -70,7 +70,7 @@ In its `delivery.yml`:
 | `integrations-secret` | none | The name of that secret, which they read as an environment variable. Without it the job fails, because live tests skip without a key and look like a pass |
 | `publishing` | `true` | Anything else leaves the draft alone when a release merges into `main`. New plugins start with `${{ vars.PUBLISHING_ENABLED }}`, so publishing stays off until the maintainer sets that variable |
 
-Both also pass the `AUTOMATION_TOKEN` secret, and nothing else. The exception is a plugin with `integrations-secret`, whose `delivery.yml` must say `secrets: inherit` instead: GitHub only hands environment secrets to a called workflow that way. With the secret passed by name, it simply does not arrive.
+Both also pass the `APP_CLIENT_ID` and `APP_PRIVATE_KEY` secrets of the GitHub App that does the writing, and nothing else. The exception is a plugin with `integrations-secret`, whose `delivery.yml` must say `secrets: inherit` instead: GitHub only hands environment secrets to a called workflow that way. With the secret passed by name, it simply does not arrive.
 
 ## Setting up a plugin
 
@@ -82,7 +82,7 @@ Both also pass the `AUTOMATION_TOKEN` secret, and nothing else. The exception is
    node scripts/setup-repo.mjs OWNER/REPOSITORY
    ```
 
-4. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) for that repository only, with read and write on **Contents** and **Pull requests**, and set it with `gh secret set AUTOMATION_TOKEN --repo OWNER/REPOSITORY`. Do the same when it expires. A pull request opened with the workflow's own token leaves the Gate waiting for a click on "Approve workflows to run", which is why this is needed.
+4. Give the plugin the GitHub App that does the writing. Install the App on the repository, then set its two secrets: `gh secret set APP_CLIENT_ID --repo OWNER/REPOSITORY` (the **Client ID** on the App's page, a string starting with `Iv`, not the number called App ID), and `gh secret set APP_PRIVATE_KEY --repo OWNER/REPOSITORY < key.pem`. The App needs **Contents** and **Pull requests** with read and write, and **Metadata** with read, and no webhook. Each run swaps the key for a token that lasts an hour and reaches this repository only, so nothing expires. A pull request opened with the workflow's own token leaves the Gate waiting for a click on "Approve workflows to run", which is why the App opens them. Because the App is the author, the maintainer can approve the pull request to `main`, and the job `Maintainer approval` needs exactly that.
 
 Each repository requires only two checks: `gate / Passed` and `CodeQL`. `Passed` is one job that waits for all of the Gate, so the jobs can change here without touching the settings of each plugin. When it is red, it is only the summary: open the job it names, because that one says what it needs.
 

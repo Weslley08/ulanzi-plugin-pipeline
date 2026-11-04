@@ -30,11 +30,14 @@ on:
         type: string
         default: 'true'
     secrets:
-      AUTOMATION_TOKEN:
-        description: Does the writing. A fork does not have it.
+      APP_CLIENT_ID:
+        description: The client ID of the GitHub App that does the writing. A fork does not have it.
+        required: false
+      APP_PRIVATE_KEY:
+        description: The private key of that App.
         required: false
 
-# AUTOMATION_TOKEN does the writing, because a pull request opened with this workflow's own token leaves
+# The GitHub App does the writing, because a pull request opened with this workflow's own token leaves
 # the Gate waiting for a click. The jobs that hold it run no npm, so nothing from a dependency runs next to it.
 permissions:
   contents: read
@@ -42,15 +45,27 @@ permissions:
 jobs:
   next:
     name: Next step
-    # A fork has no AUTOMATION_TOKEN, and its author opens the pull request here by hand.
+    # A fork has no App secrets, and its author opens the pull request here by hand.
     if: ${{ !github.event.repository.fork && !github.event.deleted && !startsWith(github.ref, 'refs/heads/release/') }}
     runs-on: ubuntu-latest
+    env:
+      # The client ID is not secret. A step's if cannot read secrets, but it can read this.
+      APP_CLIENT_ID: ${{ secrets.APP_CLIENT_ID }}
     steps:
+      - id: app
+        # A fork or Dependabot has no secrets, so this is skipped and the steps below find no token.
+        if: ${{ env.APP_CLIENT_ID != '' }}
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           # Without the secret, checkout would stop with its own message, and the next step names what to set.
-          token: ${{ secrets.AUTOMATION_TOKEN || github.token }}
+          token: ${{ steps.app.outputs.token || github.token }}
           # Only develop pushes anything with git: the bump/ branches.
           persist-credentials: ${{ github.ref_name == 'develop' }}
       # The same commit of the pipeline as this file.
@@ -65,7 +80,7 @@ jobs:
           node-version-file: .nvmrc
       - run: node .pipeline/scripts/flow.mjs next
         env:
-          GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
           BRANCH: ${{ github.ref_name }}
           PUBLISHING_ENABLED: ${{ inputs.publishing }}
@@ -206,7 +221,19 @@ jobs:
     # Integrations may only be skipped when this plugin has none. On any other branch the rest is skipped too.
     if: ${{ !cancelled() && needs.smoke.result == 'success' && needs.measure.result == 'success' && (needs.integrations.result == 'success' || (needs.integrations.result == 'skipped' && inputs.integrations-scripts == '')) }}
     runs-on: ubuntu-latest
+    env:
+      # The client ID is not secret. A step's if cannot read secrets, but it can read this.
+      APP_CLIENT_ID: ${{ secrets.APP_CLIENT_ID }}
     steps:
+      - id: app
+        # A fork or Dependabot has no secrets, so this is skipped and the steps below find no token.
+        if: ${{ env.APP_CLIENT_ID != '' }}
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -235,7 +262,7 @@ jobs:
           node .pipeline/scripts/flow.mjs draft-release
           node .pipeline/scripts/flow.mjs open-main-pull-request
         env:
-          GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
           BRANCH: ${{ github.ref_name }}
           PUBLISHING_ENABLED: ${{ inputs.publishing }}

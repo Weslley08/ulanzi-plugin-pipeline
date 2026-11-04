@@ -11,7 +11,7 @@ The shared CI and release pipeline of the Ulanzi plugins: reusable workflows, th
 - Moving `v1` reaches every plugin at once, on every branch, with no pull request of theirs. Confirm with the maintainer before moving it, try the change on a plugin branch first, and only ever move it forward.
 - This repository must stay public: public plugins cannot call workflows from a private one.
 - A job added to `gate.yml` must also go in the `needs` of `passed`, or it stops blocking merges. A test checks this.
-- Jobs that hold `AUTOMATION_TOKEN` must not run npm, so nothing from a dependency runs next to it. A test checks this.
+- Jobs that hold the App key or its token must not run npm, so nothing from a dependency runs next to it. A test checks this.
 - A called workflow can only keep or lower the permissions of its caller, so a new permission here also needs a change in each plugin's caller.
 - Environment secrets only reach a called workflow when the caller says `secrets: inherit`. This was seen on a real run: passed by name, the secret was empty with no error, which is why the integrations job fails on an empty one.
 - `github.*` is always the plugin's. `job.workflow_repository` and `job.workflow_sha` are how a job finds this repository, and `.pipeline` must not be there when `check:secrets` runs, because it scans every file git would commit.

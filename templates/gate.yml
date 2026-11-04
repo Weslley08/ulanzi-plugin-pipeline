@@ -4,10 +4,11 @@ name: Gate
 # It also runs each week, because problems get found after the last pull request.
 on:
   pull_request:
-    # edited: changing the base or ticking a box has to run the branch rules again.
+    # edited: changing the base has to run the branch rules again.
     types: [opened, edited, reopened, synchronize]
-  push:
-    branches: [main, develop]
+  # An approval, or taking it back, decides whether a pull request to main may merge.
+  pull_request_review:
+    types: [submitted, dismissed]
   schedule:
     - cron: '23 4 * * 1'
   workflow_dispatch:
@@ -27,4 +28,5 @@ jobs:
       security-events: write
     uses: Weslley08/ulanzi-plugin-pipeline/.github/workflows/gate.yml@v1
     secrets:
-      AUTOMATION_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
+      APP_CLIENT_ID: ${{ secrets.APP_CLIENT_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
