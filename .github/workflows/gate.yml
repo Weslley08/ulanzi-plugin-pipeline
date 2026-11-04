@@ -201,6 +201,9 @@ jobs:
           persist-credentials: false
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
+          # A review has no base and head of its own, so the action is told which commits to compare.
+          base-ref: ${{ github.event.pull_request.base.sha }}
+          head-ref: ${{ github.event.pull_request.head.sha }}
           fail-on-severity: low
 
   # Merging into main publishes, and CI cannot see the device. The maintainer's approval stands in for that, so it is

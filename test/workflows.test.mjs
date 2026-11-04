@@ -42,6 +42,12 @@ test('Branch flow reads the draft, which takes write access to contents', () => 
   assert.match(jobs(workflow('gate.yml')).rules, /permission-contents: write/);
 });
 
+test('the dependency review is told its commits, because a review event has none of its own', () => {
+  const { review } = jobs(workflow('gate.yml'));
+  assert.match(review, /base-ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+  assert.match(review, /head-ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+});
+
 test('the shared workflows can only be called, and their callers name the same files', () => {
   for (const file of SHARED) {
     assert.doesNotMatch(workflow(file), /^ {2}(push|pull_request|pull_request_target|schedule|workflow_dispatch):/m, file);
