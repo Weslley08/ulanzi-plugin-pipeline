@@ -12,6 +12,11 @@ const FAKE_GH = pathToFileURL(join(root, 'test', 'support', 'fake-gh.mjs')).href
 const REPOSITORY = 'Weslley08/example';
 const POLICIES = `api repos/${REPOSITORY}/environments/release-validation/deployment-branch-policies`;
 const NO_RULES = ['api graphql', { data: { repository: { id: 'R1', branchProtectionRules: { nodes: [] } } } }];
+const DEVELOP_REFS = `api repos/${REPOSITORY}/git/matching-refs/heads/develop`;
+const MAIN_REF = `api repos/${REPOSITORY}/git/ref/heads/main`;
+const SHA = 'a'.repeat(40);
+const HAS_DEVELOP = [DEVELOP_REFS, [{ ref: 'refs/heads/develop', object: { sha: 'b'.repeat(40) } }]];
+const HAS_MAIN = [MAIN_REF, { ref: 'refs/heads/main', object: { type: 'commit', sha: SHA } }];
 
 let dir;
 let log;
@@ -19,7 +24,7 @@ let log;
 function setupRepo(args = [REPOSITORY, '--environment', 'release-validation'], replies = [NO_RULES, [POLICIES, { branch_policies: [] }]]) {
   const result = spawnSync(process.execPath, ['--import', FAKE_GH, join(root, 'scripts', 'setup-repo.mjs'), ...args], {
     encoding: 'utf8',
-    env: { ...process.env, FAKE_GH_LOG: log, FAKE_GH_REPLIES: JSON.stringify(replies) },
+    env: { ...process.env, FAKE_GH_LOG: log, FAKE_GH_REPLIES: JSON.stringify([...replies, HAS_DEVELOP]) },
   });
   return { ...result, calls: existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line)) : [] };
 }
@@ -150,4 +155,70 @@ test('without a repository it says how to use it, and changes nothing', () => {
   assert.equal(status, 1);
   assert.match(stderr, /Usage/);
   assert.equal(calls.length, 0);
+});
+
+test('creates missing develop from the exact main SHA before applying settings or branch protection', () => {
+  const { status, calls, stderr, stdout } = setupRepo([REPOSITORY], [
+    [DEVELOP_REFS, []], HAS_MAIN, NO_RULES,
+  ]);
+  assert.equal(status, 0, stderr);
+  const creations = callsTo(calls, 'api', '-X', 'POST').filter((args) => args[3] === `repos/${REPOSITORY}/git/refs`);
+  assert.equal(creations.length, 1);
+  assert.deepEqual(creations[0].at(-1), { ref: 'refs/heads/develop', sha: SHA });
+  const createIndex = calls.findIndex((args) => args === creations[0]);
+  const firstSettingsIndex = calls.findIndex((args) => args[1] === '-X' && args[2] === 'PATCH');
+  assert.ok(createIndex < firstSettingsIndex, 'branch must be created before applying any repository settings');
+  assert.match(stdout, /Done: create develop from main at aaaaaaa/);
+});
+
+test('does not move, recreate, or overwrite an existing develop branch', () => {
+  const { status, calls, stdout } = setupRepo([REPOSITORY], [NO_RULES]);
+  assert.equal(status, 0);
+  assert.equal(callsTo(calls, 'api', '-X', 'POST').filter((args) => args[3].endsWith('/git/refs')).length, 0);
+  assert.ok(!calls.some((args) => args.join(' ').includes('/git/ref/heads/main')));
+  assert.match(stdout, /Already: develop branch exists/);
+});
+
+test('missing develop dry-run reports branch creation but makes no writes', () => {
+  const { status, calls, stdout, stderr } = setupRepo([REPOSITORY, '--bootstrap-only', '--dry-run'], [
+    [DEVELOP_REFS, []], HAS_MAIN,
+  ]);
+  assert.equal(status, 0, stderr);
+  assert.match(stdout, /Would: create develop from main at aaaaaaa/);
+  assert.deepEqual(calls.map((args) => args.slice(0, 3)), [
+    ['api', `repos/${REPOSITORY}/git/matching-refs/heads/develop`],
+    ['api', `repos/${REPOSITORY}/git/ref/heads/main`],
+  ].map((args) => args.slice(0, 3)));
+  assert.equal(calls.some((args) => args[1] === '-X'), false);
+});
+
+test('bootstrap-only creates develop without protecting branches or touching repository settings', () => {
+  const { status, calls, stderr } = setupRepo([REPOSITORY, '--bootstrap-only'], [
+    [DEVELOP_REFS, []], HAS_MAIN,
+  ]);
+  assert.equal(status, 0, stderr);
+  assert.equal(calls.filter((args) => args[1] === '-X').length, 1);
+  assert.equal(callsTo(calls, 'api', '-X', 'POST')[0][3], `repos/${REPOSITORY}/git/refs`);
+  assert.equal(calls.some((args) => args.join(' ').includes('/protection')), false);
+});
+
+test('existing develop bootstrap-only is a no-op', () => {
+  const { status, calls, stdout } = setupRepo([REPOSITORY, '--bootstrap-only']);
+  assert.equal(status, 0);
+  assert.equal(calls.length, 1);
+  assert.match(stdout, /Already: develop branch exists/);
+});
+
+test('branch creation refuses invalid main ref and stops before any settings changes', () => {
+  const { status, calls } = setupRepo([REPOSITORY], [
+    [DEVELOP_REFS, []], [MAIN_REF, { ref: 'refs/heads/main', object: { sha: '' } }], NO_RULES,
+  ]);
+  assert.notEqual(status, 0);
+  assert.equal(calls.some((args) => args[1] === '-X'), false);
+});
+
+test('branch API errors do not get mistaken for a missing branch', () => {
+  const { status, calls } = setupRepo([REPOSITORY], [[DEVELOP_REFS, { fail: true }], HAS_MAIN, NO_RULES]);
+  assert.notEqual(status, 0);
+  assert.equal(calls.some((args) => args[1] === '-X'), false);
 });
