@@ -13,14 +13,18 @@ const CODEQL_CATEGORY = '.github/workflows/gate.yml:analyze';
 const CHECKS = ['gate / Passed', 'CodeQL'];
 
 const { values: options, positionals: [repository] } = parseArgs({
-  options: { environment: { type: 'string' }, 'dry-run': { type: 'boolean', default: false } },
+  options: {
+    environment: { type: 'string' },
+    'dry-run': { type: 'boolean', default: false },
+    'bootstrap-only': { type: 'boolean', default: false },
+  },
   allowPositionals: true,
 });
 const dryRun = options['dry-run'];
 const environment = options.environment;
 
 if (!/^[\w.-]+\/[\w.-]+$/.test(repository ?? '')) {
-  console.error('Usage: node scripts/setup-repo.mjs OWNER/REPOSITORY [--environment NAME] [--dry-run]');
+  console.error('Usage: node scripts/setup-repo.mjs OWNER/REPOSITORY [--environment NAME] [--dry-run] [--bootstrap-only]');
   process.exit(1);
 }
 
@@ -38,6 +42,35 @@ function change(description, args, body) {
   gh(args, body);
   console.log(`Done: ${description}`);
 }
+
+/**
+ * Bootstrap develop from the current main HEAD, but only if it is absent.
+ * Query matching refs instead of suppressing all API failures as "branch missing".
+ * This avoids a force update and preserves an existing develop branch unmodified.
+ */
+function ensureDevelopBranch() {
+  const refs = JSON.parse(gh(['api', `repos/${repository}/git/matching-refs/heads/develop`]));
+  if (!Array.isArray(refs)) throw new Error('GitHub returned an invalid reference list');
+  if (refs.some(({ ref }) => ref === 'refs/heads/develop')) {
+    console.log('Already: develop branch exists; preserving it');
+    return;
+  }
+
+  const main = JSON.parse(gh(['api', `repos/${repository}/git/ref/heads/main`]));
+  const sha = main?.object?.sha;
+  if (main?.ref !== 'refs/heads/main' || !/^[0-9a-f]{40}$/i.test(sha ?? '')) {
+    throw new Error('Cannot bootstrap develop: main must be an existing commit ref');
+  }
+  change(`create develop from main at ${sha.slice(0, 7)}`, ['api', '-X', 'POST', `repos/${repository}/git/refs`], {
+    ref: 'refs/heads/develop',
+    sha,
+  });
+}
+
+ensureDevelopBranch();
+// Useful before the required Gate/CodeQL checks become available. Full setup
+// still requires their actual existence before protecting the branches.
+if (options['bootstrap-only']) process.exit(0);
 
 // Not strict: main holds merge commits that develop never gets, so "up to date with the base" could never be true.
 const protection = (contexts) => ({
