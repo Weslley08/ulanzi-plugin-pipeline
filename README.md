@@ -75,14 +75,23 @@ Both also pass the `APP_CLIENT_ID` and `APP_PRIVATE_KEY` secrets of the GitHub A
 ## Setting up a plugin
 
 1. Copy [`templates/gate.yml`](templates/gate.yml) and [`templates/delivery.yml`](templates/delivery.yml) to its `.github/workflows/`, and [`templates/pipeline.json`](templates/pipeline.json) to its `.github/`, then fill them in.
-2. Open a pull request, and wait for its checks to report. A required check that never reports blocks every merge, so this comes before the next step.
-3. Apply the settings with your own login. This protects `develop`, `main` and `release/v*`, allows merge commits only, turns on auto-merge and the security settings. Add `--dry-run` first to see the changes, and `--environment NAME` if the plugin has a secret for `integrations-secret`.
+2. Bootstrap a missing `develop` branch from the **current main commit** (the script never overwrites an existing branch). Run from this central pipeline repository with your own authenticated `gh` login; preview first:
 
+   ```sh
+   node scripts/setup-repo.mjs OWNER/REPOSITORY --bootstrap-only --dry-run
+   node scripts/setup-repo.mjs OWNER/REPOSITORY --bootstrap-only
    ```
+
+   This mode makes no protection, merge-setting or security-setting changes. The normal setup also bootstraps `develop` automatically if it is absent, **before** applying protections, and stops if it cannot read `main` or the remote refs.
+3. Open a pull request and wait for its Gate and CodeQL checks to actually report. A required check that never reports blocks every merge, so this comes before the next step.
+4. Apply the complete settings with your own login **only after those checks exist**. This protects `develop`, `main` and `release/v*`, allows merge commits only, turns on auto-merge and the security settings. Add `--dry-run` first, and `--environment NAME` if the plugin has a secret for `integrations-secret`.
+
+   ```sh
+   node scripts/setup-repo.mjs OWNER/REPOSITORY --dry-run
    node scripts/setup-repo.mjs OWNER/REPOSITORY
    ```
 
-4. Give the plugin the GitHub App that does the writing. Install the App on the repository, then set its two secrets: `gh secret set APP_CLIENT_ID --repo OWNER/REPOSITORY` (the **Client ID** on the App's page, a string starting with `Iv`, not the number called App ID), and `gh secret set APP_PRIVATE_KEY --repo OWNER/REPOSITORY < key.pem`. The App needs **Contents** and **Pull requests** with read and write, and **Metadata** with read, and no webhook. Each run swaps the key for a token that lasts an hour and reaches this repository only, so nothing expires. A pull request opened with the workflow's own token leaves the Gate waiting for a click on "Approve workflows to run", which is why the App opens them. Because the App is the author, the maintainer can approve the pull request to `main`, and the job `Maintainer approval` needs exactly that.
+5. Give the plugin the GitHub App that does the writing. Install the App on the repository, then set its two secrets: `gh secret set APP_CLIENT_ID --repo OWNER/REPOSITORY` (the **Client ID** on the App's page, a string starting with `Iv`, not the number called App ID), and `gh secret set APP_PRIVATE_KEY --repo OWNER/REPOSITORY < key.pem`. The App needs **Contents** and **Pull requests** with read and write, and **Metadata** with read, and no webhook. Each run swaps the key for a token that lasts an hour and reaches this repository only, so nothing expires. A pull request opened with the workflow's own token leaves the Gate waiting for a click on "Approve workflows to run", which is why the App opens them. Because the App is the author, the maintainer can approve the pull request to `main`, and the job `Maintainer approval` needs exactly that.
 
 Each repository requires only two checks: `gate / Passed` and `CodeQL`. `Passed` is one job that waits for all of the Gate, so the jobs can change here without touching the settings of each plugin. When it is red, it is only the summary: open the job it names, because that one says what it needs.
 
