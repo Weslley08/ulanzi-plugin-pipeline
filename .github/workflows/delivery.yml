@@ -25,6 +25,10 @@ on:
         description: The name of the secret they read as an environment variable. Empty needs none.
         type: string
         default: ''
+      publishing:
+        description: Only the exact string true allows publishing after explicit maintainer approval.
+        type: string
+        default: 'false'
     secrets:
       APP_CLIENT_ID:
         description: The client ID of the GitHub App that does the writing. A fork does not have it.
